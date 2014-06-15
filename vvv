@@ -28,6 +28,7 @@ usage() {
 "Options:\n"\
 "-a   action      Can be create, delete, or list\n"\
 "-d   domain      Desired domain (e.g. mysite.dev)\n"\
+"-s   skeleton    Build local dev environment with WordPress-Skeleton repo (http://github.com/markjaquith/WordPress-Skeleton)\n"\
 "-f   files only  Do not provision Vagrant, just create the site directory and files\n"\
 "-i   image proxy Load images by proxy from the live site (so you don't have to download the uploads folder)\n"\
 "-l   live URL    URL of the live site, currently only used if loading images by proxy\n"\
@@ -107,8 +108,9 @@ fi
 # =============================================================================
 files_only=false
 wp_debug=false
+skeleton_build=false
 
-while getopts "xfil:a:n:v:p:d:" opt; do
+while getopts "xsfil:a:n:v:p:d:" opt; do
 	case $opt in
 		a)
 			action=$OPTARG >&2
@@ -118,6 +120,9 @@ while getopts "xfil:a:n:v:p:d:" opt; do
 			;;
 		f)
 			files_only=true >&2
+			;;
+		s)
+			skeleton_build=y >&2
 			;;
 		v)
 			version=$OPTARG >&2
@@ -246,6 +251,16 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 		fi
 	done
 
+	# Ask if local-dev environment should be built using WordPress-Skeleton
+	while [ -z $skeleton_build ]; do
+		echo -n "Build local-dev environment with WordPress-Skeleton git repo? -- http://github.com/markjaquith/WordPress-Skeleton -- (y/n): "
+		read skeleton-build
+		if [[ $skeleton-build != 'y' && $skeleton-build != 'n' ]]; then
+			cecho "Answer y or n." red
+			unset skeleton-build
+		fi
+	done
+
 	if [ ! -z $version ]; then
 		# Attempt to verify the existence of the version (hacky)
 		if curl -s http://codex.wordpress.org/Version_$version | grep 'currently no text' > /dev/null; then
@@ -304,18 +319,24 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	# =============================================================================
 	cecho "\nAbout to perform the following:" normal bold
 	echo -e "* Halt Vagrant (if running)\n* Create directory $site in $path/www\n* Create files vvv-init.sh, wp-cli.yml, and vvv-hosts in directory $site\n* Create file $site.conf in $path/config/nginx-config/sites"
-	if [[ "$files_only" = false ]]; then
+  if [[ "$files_only" = false ]]; then
 		echo -e "* Run \`vagrant up --provision\` to initialize site"
 	else
 		cecho "\nNote: You will need to run \`vagrant up --provision\` to initialize the new site before $domain will load in a browser." red
 	fi
 
 	cecho "\nProvisioning Vagrant will do the following:" default bold
-	echo -e "* Create database $site\n* Install WordPress $version in the htdocs directory\n* Make the site visible at $domain"
+  echo -e "* Create database $site\n"
+  if [[ $skeleton_build = 'y' ]]; then
+	  echo -e "* Install WordPress $version in the \"wp\" directory\n"
+  else
+	  echo -e "* Install WordPress $version in the \"htdocs\" directory\n"
+  fi
+  echo -e "* Make the site visible at $domain"
 
 	echo -en "\n"
 	while [ -z $continue_create ]; do
-		echo -n "Continue (y/n)? "
+    echo -n "Continue (y/n)? "
 		read continue_create
 
 		if [[ $continue_create = 'n' ]]; then
@@ -335,18 +356,23 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 
 	# Create site folder with vvv-init.sh file
 	# =============================================================================
-	cd $path/www
-	echo -en "Creating site directory, wp-cli.yml, and vvv-init.sh file... "
-	mkdir $site && cd $site
+  if [[ $skeleton_build = 'y' ]]; then
 
-	printf "path: htdocs" > wp-cli.yml
+    echo -e "Getopts \"skeleton_build\" configuration successful!"
 
-	wp_debug_text=''
-	if [[ $wp_debug = 'y' ]]; then
-		wp_debug_text=" --extra-php <<PHP\ndefine('WP_DEBUG', true);\ndefine('WP_DEBUG_LOG', true);\nPHP"
-	fi
+  else
+	  cd $path/www
+	  echo -en "Creating site directory, wp-cli.yml, and vvv-init.sh file... "
+	  mkdir $site && cd $site
 
-	printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
+	  printf "path: htdocs" > wp-cli.yml
+
+	  wp_debug_text=''
+	  if [[ $wp_debug = 'y' ]]; then
+	  	wp_debug_text=" --extra-php <<PHP\ndefine('WP_DEBUG', true);\ndefine('WP_DEBUG_LOG', true);\nPHP"
+	  fi
+
+	  printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
 "mysql -u root --password=root -e \"CREATE DATABASE IF NOT EXISTS \\\`$db_name\\\`\"\n"\
 "mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON \\\`$db_name\\\`.* TO wp@localhost IDENTIFIED BY 'wp';\"\n\n"\
 "if [ ! -d \"htdocs\" ]; then\n"\
@@ -361,6 +387,8 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 "\twp core update --allow-root\n"\
 "\twp core update-db --allow-root\n"\
 "fi\n" > vvv-init.sh
+
+  fi
 
 	done_text
 
