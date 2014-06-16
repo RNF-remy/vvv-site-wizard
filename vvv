@@ -28,6 +28,7 @@ usage() {
 "Options:\n"\
 "-a   action      Can be create, delete, or list\n"\
 "-d   domain      Desired domain (e.g. mysite.dev)\n"\
+"-s   skeleton    Build local dev environment with WordPress-Skeleton repo (http://github.com/markjaquith/WordPress-Skeleton)\n"\
 "-f   files only  Do not provision Vagrant, just create the site directory and files\n"\
 "-i   image proxy Load images by proxy from the live site (so you don't have to download the uploads folder)\n"\
 "-l   live URL    URL of the live site, currently only used if loading images by proxy\n"\
@@ -108,7 +109,7 @@ fi
 files_only=false
 wp_debug=false
 
-while getopts "xfil:a:n:v:p:d:" opt; do
+while getopts "xsfil:a:n:v:p:d:" opt; do
 	case $opt in
 		a)
 			action=$OPTARG >&2
@@ -118,6 +119,9 @@ while getopts "xfil:a:n:v:p:d:" opt; do
 			;;
 		f)
 			files_only=true >&2
+			;;
+		s)
+			skeleton_build=y >&2
 			;;
 		v)
 			version=$OPTARG >&2
@@ -246,6 +250,16 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 		fi
 	done
 
+	# Ask if local-dev environment should be built using WordPress-Skeleton
+	while [ -z $skeleton_build ]; do
+		echo -n "Build local-dev environment with WordPress-Skeleton git repo? -- http://github.com/markjaquith/WordPress-Skeleton -- (y/n): "
+		read skeleton_build
+		if [[ $skeleton_build != 'y' && $skeleton_build != 'n' ]]; then
+			cecho "Answer y or n." red
+			unset skeleton_build
+		fi
+	done
+
 	if [ ! -z $version ]; then
 		# Attempt to verify the existence of the version (hacky)
 		if curl -s http://codex.wordpress.org/Version_$version | grep 'currently no text' > /dev/null; then
@@ -256,7 +270,7 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 		fi
 	fi
 
-	while [[ -z $version ]]; do
+	while [[ -z $version && $skeleton_build = 'n' ]]; do
 		# Get WordPress version
 		echo -n "WordPress version to install (leave blank for release version): "
 		read version
@@ -303,19 +317,25 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	# Inform the user of what's about to happen and give them a chance to back out
 	# =============================================================================
 	cecho "\nAbout to perform the following:" normal bold
-	echo -e "* Halt Vagrant (if running)\n* Create directory $site in $path/www\n* Create files vvv-init.sh, wp-cli.yml, and vvv-hosts in directory $site\n* Create file $site.conf in $path/config/nginx-config/sites"
-	if [[ "$files_only" = false ]]; then
+	echo -e "* Halt Vagrant (if running)\n* Create directory $site in $path/www\n* Create files vvv-init.sh and vvv-hosts in directory $site\n* Create file $site.conf in $path/config/nginx-config/sites"
+  if [[ "$files_only" = false ]]; then
 		echo -e "* Run \`vagrant up --provision\` to initialize site"
 	else
 		cecho "\nNote: You will need to run \`vagrant up --provision\` to initialize the new site before $domain will load in a browser." red
 	fi
 
 	cecho "\nProvisioning Vagrant will do the following:" default bold
-	echo -e "* Create database $site\n* Install WordPress $version in the htdocs directory\n* Make the site visible at $domain"
+  echo -e "* Create database $site"
+  if [[ $skeleton_build = 'y' ]]; then
+	  echo -e "* Clone WordPress as a Git Submodule into \"$site/wp/.\""
+  else
+	  echo -e "* Install WordPress $version in \"$site/htdocs/.\" directory"
+  fi
+  echo -e "* Make the site visible at $domain"
 
 	echo -en "\n"
 	while [ -z $continue_create ]; do
-		echo -n "Continue (y/n)? "
+    echo -n "Continue (y/n)? "
 		read continue_create
 
 		if [[ $continue_create = 'n' ]]; then
@@ -333,34 +353,70 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	cd $path
 	vagrant halt
 
+  # Set Variables
+	# =============================================================================
+
+  db_user=wp
+  db_pass=wp
+
+  wp_debug_text=''
+  if [[ $wp_debug = 'y' ]]; then
+  	wp_debug_text=" --extra-php <<PHP\ndefine('WP_DEBUG', true);\ndefine('WP_DEBUG_LOG', true);\nPHP"
+  fi
+
 	# Create site folder with vvv-init.sh file
 	# =============================================================================
-	cd $path/www
-	echo -en "Creating site directory, wp-cli.yml, and vvv-init.sh file... "
-	mkdir $site && cd $site
+  cd $path/www
+  echo -en "Creating site directory and vvv-init.sh file... "
+    if [[ $skeleton_build = 'y' ]]; then
+      echo 'Cloning WordPress-Skeleton repo into $path/www/$site...'
+        git clone http://github.com/markjaquith/WordPress-Skeleton $site
+      done_text
+      echo 'Initializing all Git submodules, including WordPress Core...'
+        cd $site
+        git submodule update --init --recursive
+      done_text
+      echo 'Generating vvv-init.sh file...'
+      printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
+"mysql -u root --password=root -e \"CREATE DATABASE IF NOT EXISTS \\\`$db_name\\\`\"\n"\
+"mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON \\\`$db_name\\\`.* TO $db_user@localhost IDENTIFIED BY \'$db_pass\';\"\n\n"\
+"\techo 'Checking for local-config.php...'\n"\
+"if [ ! -e \"local-config.php\" ]; then\n"\
+"\techo 'Setting local-config.php variables...'\n"\
+"\tmv local-config-sample.php local-config.php\n"\
+"\tsed -i 's/local_db_name/$db_name/' local-config.php\n"\
+"\tsed -i 's/local_db_user/$db_user/' local-config.php\n"\
+"\tsed -i 's/local_db_password/$db_pass/' local-config.php\n"\
+"\techo 'Installing WordPress database tables...'\n"\
+"\t\twp core install --url=$domain --title=\"$site - A WordPress Site\" --admin_user=admin --admin_password=password --admin_email=demo@example.com --allow-root\n"\
+"\t\twp option update siteurl http://$domain/wp\n"\
+"else\n"\
+"\techo 'local-config.php already exists'\n"\
+"\techo 'Run git from host machine shared $site folder to update WordPress:'\n"\
+"\techo 'Use \"cd $path/www/$site\"'\n"\
+"\t\techo 'then \"git pull origin\"'\n"\
+"\t\techo 'and \"git submodule update\"'\n"\
+"fi\n" > vvv-init.sh
 
-	printf "path: htdocs" > wp-cli.yml
-
-	wp_debug_text=''
-	if [[ $wp_debug = 'y' ]]; then
-		wp_debug_text=" --extra-php <<PHP\ndefine('WP_DEBUG', true);\ndefine('WP_DEBUG_LOG', true);\nPHP"
-	fi
-
-	printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
+    else
+      mkdir $site && cd $site
+      printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
 "mysql -u root --password=root -e \"CREATE DATABASE IF NOT EXISTS \\\`$db_name\\\`\"\n"\
 "mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON \\\`$db_name\\\`.* TO wp@localhost IDENTIFIED BY 'wp';\"\n\n"\
 "if [ ! -d \"htdocs\" ]; then\n"\
 "\techo 'Installing WordPress $version in $site/htdocs...'\n"\
 "\tmkdir ./htdocs\ncd ./htdocs\n"\
 "\twp core download --allow-root $installversion\n"\
-"\twp core config --dbname=\"$db_name\" --dbuser=wp --dbpass=wp --dbhost=\"localhost\" --allow-root$wp_debug_text\n"\
-"\twp core install --url=$domain --title=\"$site - A WordPress Site\" --admin_user=admin --admin_password=password --admin_email=demo@example.com --allow-root\n"\
+"\t\twp core config --dbname=\"$db_name\" --dbuser=\"$db_user\" --dbpass=\"$db_pass\" --dbhost=\"localhost\" --allow-root$wp_debug_text\n"\
+"\t\twp core install --url=$domain --title=\"$site - A WordPress Site\" --admin_user=admin --admin_password=password --admin_email=demo@example.com --allow-root\n"\
 "\t\tcd -\n"\
 "else\n"\
 "\techo 'Updating WordPress in $site/htdocs...'\n"\
 "\twp core update --allow-root\n"\
 "\twp core update-db --allow-root\n"\
 "fi\n" > vvv-init.sh
+
+    fi
 
 	done_text
 
@@ -376,9 +432,13 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	# =============================================================================
 	cd $path/config/nginx-config/sites
 	echo -en "Creating nginx-config/sites/$site.conf... "
-	sed -e "s/testserver\.com/$domain/" \
-		-e "s/wordpress-local/$site\/htdocs/" local-nginx-example.conf-sample > $site.conf
-
+  if [[ $skeleton_build = 'y' ]]; then
+    sed -e "s/testserver\.com/$domain/" \
+      -e "s/wordpress-local/$site/" local-nginx-example.conf-sample > $site.conf
+  else
+    sed -e "s/testserver\.com/$domain/" \
+      -e "s/wordpress-local/$site\/htdocs/" local-nginx-example.conf-sample > $site.conf
+  fi
 	if [[ $image_proxy = 'y' ]]; then
 		sed -e $'s/\}/\\\n\\\t# Directives to send expires headers and turn off 404 error logging\.\\\n\\\tlocation ~\* \\.\(js\|css\|png\|jpg\|jpeg\|gif\|ico\)\$ \{\\\n\\\t\texpires 24h;\\\n\\\t\\\tlog_not_found off;\\\n\\\t\\\ttry_files \$uri \$uri\/ @production;\\\n\\\t\}\\\n\\\n\\\tlocation @production \{\\\n\\\t\\\tresolver 8\.8\.8\.8;\\\n\\\t\\\tproxy_pass http:\/\/LIVE_URL\/\$uri;\\\n\\\t\}\\\n\}/' -e "s/LIVE_URL/$live_site_url/" $site.conf > tmp.conf
 		rm $site.conf
