@@ -28,7 +28,7 @@ usage() {
 "Options:\n"\
 "-a   action      Can be create, delete, or list\n"\
 "-d   domain      Desired domain (e.g. mysite.dev)\n"\
-"-s   skeleton    Build local dev environment with WordPress-Skeleton repo (http://github.com/markjaquith/WordPress-Skeleton)\n"\
+"-s   skeleton    Build local dev environment with RootAndFlow Revenant repo (http://github.com/markjaquith/RootAndFlow Revenant)\n"\
 "-f   files only  Do not provision Vagrant, just create the site directory and files\n"\
 "-i   image proxy Load images by proxy from the live site (so you don't have to download the uploads folder)\n"\
 "-l   live URL    URL of the live site, currently only used if loading images by proxy\n"\
@@ -109,7 +109,7 @@ fi
 files_only=false
 wp_debug=false
 
-while getopts "xsfil:a:n:v:p:d:" opt; do
+while getopts "xrfil:a:n:v:p:d:" opt; do
 	case $opt in
 		a)
 			action=$OPTARG >&2
@@ -120,8 +120,8 @@ while getopts "xsfil:a:n:v:p:d:" opt; do
 		f)
 			files_only=true >&2
 			;;
-		s)
-			skeleton_build=y >&2
+		r)
+			revenant_build=y >&2
 			;;
 		v)
 			version=$OPTARG >&2
@@ -250,13 +250,13 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 		fi
 	done
 
-	# Ask if local-dev environment should be built using WordPress-Skeleton
-	while [ -z $skeleton_build ]; do
-		echo -n "Build local-dev environment with WordPress-Skeleton git repo? -- http://github.com/markjaquith/WordPress-Skeleton -- (y/n): "
-		read skeleton_build
-		if [[ $skeleton_build != 'y' && $skeleton_build != 'n' ]]; then
+	# Ask if local-dev environment should be built using RootAndFlow Revenant
+	while [ -z $revenant_build ]; do
+		echo -n "Build local-dev environment with RootAndFlow Revenant git repo? -- http://github.com/RNF-remy/revenant -- (y/n): "
+		read revenant_build
+		if [[ $revenant_build != 'y' && $revenant_build != 'n' ]]; then
 			cecho "Answer y or n." red
-			unset skeleton_build
+			unset revenant_build
 		fi
 	done
 
@@ -270,7 +270,7 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 		fi
 	fi
 
-	while [[ -z $version && $skeleton_build = 'n' ]]; do
+	while [[ -z $version && $revenant_build = 'n' ]]; do
 		# Get WordPress version
 		echo -n "WordPress version to install (leave blank for release version): "
 		read version
@@ -326,8 +326,8 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 
 	cecho "\nProvisioning Vagrant will do the following:" default bold
   echo -e "* Create database $site"
-  if [[ $skeleton_build = 'y' ]]; then
-	  echo -e "* Clone WordPress as a Git Submodule into \"$site/wp/.\""
+  if [[ $revenant_build = 'y' ]]; then
+	  echo -e "* Clone Git Subtrees:\n\tWordPress into \"$site/wp/.\n\tReverie Parent and Child themes into \"$site/content/themes/.\""
   else
 	  echo -e "* Install WordPress $version in \"$site/htdocs/.\" directory"
   fi
@@ -368,15 +368,12 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	# =============================================================================
   cd $path/www
   echo -en "Creating site directory and vvv-init.sh file... "
-    if [[ $skeleton_build = 'y' ]]; then
-      echo 'Cloning WordPress-Skeleton repo into $path/www/$site...'
-        git clone http://github.com/markjaquith/WordPress-Skeleton $site
-      done_text
-      echo 'Initializing all Git submodules, including WordPress Core...'
-        cd $site
-        git submodule update --init --recursive
+    if [[ $revenant_build = 'y' ]]; then
+      echo 'Cloning RootAndFlow Revenant repo into $path/www/$site...'
+        git clone http://github.com/RNF-remy/revenant $site
       done_text
       echo 'Generating vvv-init.sh file...'
+      cd $site
       printf "echo \"Creating database '$site' (if it does not exist)...\"\n\n"\
 "mysql -u root --password=root -e \"CREATE DATABASE IF NOT EXISTS \\\`$db_name\\\`\"\n"\
 "mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON \\\`$db_name\\\`.* TO $db_user@localhost IDENTIFIED BY \'$db_pass\';\"\n\n"\
@@ -432,7 +429,7 @@ if [[ $action = 'new' || $action = 'make' || $action = 'create' ]]; then
 	# =============================================================================
 	cd $path/config/nginx-config/sites
 	echo -en "Creating nginx-config/sites/$site.conf... "
-  if [[ $skeleton_build = 'y' ]]; then
+  if [[ $revenant_build = 'y' ]]; then
     sed -e "s/testserver\.com/$domain/" \
       -e "s/wordpress-local/$site/" local-nginx-example.conf-sample > $site.conf
   else
