@@ -1,11 +1,14 @@
 #!/bin/bash
 
 # =============================================================================
+# Summoner - Site Setup Script for Wordpress Revenant 
+#
+# Version 0.5.0
+#
+# forked from:
 # VVV Site Setup Script
 # By Alison Barrett <alison@barre.tt>
 # https://github.com/aliso/vvv-site-wizard
-#
-# Version 0.3.0
 #
 # This script automates the creation & deletion of new WordPress sites using
 # Varying Vagrant Vagrants (https://github.com/Varying-Vagrant-Vagrants/VVV).
@@ -20,6 +23,7 @@
 # When not called from the VVV root directory, the script will prompt the user
 # for the path to VVV. To run this from any directory and skip that prompt,
 # uncomment the following line and set it to the VVV root dir:
+#path=/path/to/vvv/root
 path=/Users/remy/webdev/vagrant-local
 
 # =============================================================================
