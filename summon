@@ -1,22 +1,23 @@
 #!/bin/bash
 
 # =============================================================================
-# Summoner - Site Setup Script for Wordpress Revenant 
+# SUMMONER -  Version 0.5.0
+# Wordpress Revenant framework setup script for local development on Varying Vagrant Vagrants.
 #
-# Version 0.5.0
+# Revenant combines
+# * WP Skeleton: A toolkit for creating professional Wordpress deployments
+# * Reverie: Responsive Master and Child themes for Wordpress using ZURB Foundation 5
 #
 # forked from:
-# VVV Site Setup Script
-# By Alison Barrett <alison@barre.tt>
-# https://github.com/aliso/vvv-site-wizard
-#
-# This script automates the creation & deletion of new WordPress sites using
-# Varying Vagrant Vagrants (https://github.com/Varying-Vagrant-Vagrants/VVV).
-#
-# Integrated with WP Stack and Reverie Master and Child themes
-#
+## VVV Site Setup Script
+## By Alison Barrett <alison@barre.tt>
+## https://github.com/aliso/vvv-site-wizard
+##
+## This script automates the creation & deletion of new WordPress sites using
+## Varying Vagrant Vagrants (https://github.com/Varying-Vagrant-Vagrants/VVV).
+##
 # Usage:
-# vvv [-a create|delete|list] [-n site] [-v version] [-d domain]
+# summon [-a create|delete|list] [-n site] [-v version] [-d domain]
 # [-p path/to/vvv] [-f] [-x]
 # =============================================================================
 #
